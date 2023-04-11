@@ -1,0 +1,16 @@
+[package]
+name = "bellman410"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8.5"
+bit-vec = "0.6.3"
+byteorder = "1"
+bellman = "0.14.0"
+bls12_381 = "0.8.0"
+ff = "0.13.0"
+sha2 = "0.10.6"
+pairing = "0.23.0"
