@@ -9,76 +9,67 @@ use bls12_381::Bls12;
 use ff::PrimeField;
 use rand::rngs::OsRng;
 
-// MyCircuit struct remains the same
-struct MyCircuit<Scalar: PrimeField> {
+struct MultiplyDemo<Scalar: PrimeField> {
     a: Option<Scalar>,
     b: Option<Scalar>,
+    c: Option<Scalar>,
 }
 
-impl<Scalar: PrimeField> Circuit<Scalar> for MyCircuit<Scalar> {
+impl<Scalar: PrimeField> Circuit<Scalar> for MultiplyDemo<Scalar> {
     fn synthesize<CS: ConstraintSystem<Scalar>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
-        // Allocate the variables a and b
-        let a = AllocatedNum::alloc(cs.namespace(|| "a"), || {
-            Ok(*self.a.as_ref().unwrap())
+        // Allocate the first value (private)
+        let a = cs.alloc(|| "a", || {
+            self.a.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        let b = AllocatedNum::alloc(cs.namespace(|| "b"), || {
-            Ok(*self.b.as_ref().unwrap())
+        
+        // Allocate the second value (private)
+        let b = cs.alloc(|| "b", || {
+            self.b.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        
+        // Allocate the third value (public)
+        // allocating a public input uses alloc_input
+        let c = cs.alloc_input(|| "c", || {
+            self.c.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
-        // Compute a * b
-        let c = a.mul(cs.namespace(|| "a * b"), &b)?;
-
-        // Enforce the constraint a * b = 24
-        let twenty_four_lc = LinearCombination::zero() + (Scalar::from(24u64), CS::one());
-
-
-        //let twenty_four_lc = ConstraintSystem::<Scalar>::one() * Scalar::from(24u64);
+        // a * b = c?
         cs.enforce(
-            || "a * b = 24",
-            |lc| lc + a.get_variable(),
-            |lc| lc + b.get_variable(),
-            |lc| lc + c.get_variable() - &twenty_four_lc,
+            || "mult",
+            |lc| lc + a,
+            |lc| lc + b,
+            |lc| lc + c
         );
         
-
         Ok(())
     }
 }
 
-
 fn main() {
-    // Use the same MyCircuit definition from the previous post.
+    let rng = &mut OsRng;
 
-    // Create parameters for our circuit. In a production deployment these would
-    // be generated securely using a multiparty computation.
-    let params = {
-        let c = MyCircuit::<bls12_381::Scalar> { a: None, b: None };
-        groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap()
+    let pk = {
+        let c = MultiplyDemo {
+            a: None,
+            b: None,
+            c: None,
+        };
+
+        groth16::generate_random_parameters::<Bls12, _, _>(c, rng).unwrap()
     };
 
-    // Prepare the verification key (for proof verification).
-    let pvk = groth16::prepare_verifying_key(&params.vk);
+    let pvk = groth16::prepare_verifying_key(&pk.vk);
 
-    // Choose values for a and b, such that a * b = 24.
-    let a_value = bls12_381::Scalar::from(3u64);
-    let b_value = bls12_381::Scalar::from(8u64);
-
-    // Create an instance of our circuit (with a and b as witnesses).
-    let c = MyCircuit {
-        a: Some(a_value),
-        b: Some(b_value),
+    let assignment = MultiplyDemo {
+        a: Some(4.into()),
+        b: Some(2.into()),
+        c: Some(8.into()),
     };
 
-    // Create a Groth16 proof with our parameters.
-    let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
+    let public_inputs = vec![assignment.c.unwrap()];
 
-    // Compute inputs for proof verification.
-    // let inputs = {vec![bls12_381::Scalar::from(24u64)]};
-    let public_inputs = {
-        vec![bls12_381::Scalar::from(24u64)]
-    };
+    let proof = groth16::create_random_proof(assignment, &pk, rng).unwrap();
 
-    // Check the proof!
     let verification_result = groth16::verify_proof(&pvk, &proof, &public_inputs);
 
     match verification_result {
@@ -86,3 +77,4 @@ fn main() {
         Err(_) => println!("Proof verification: FAILED"),
     }
 }
+
