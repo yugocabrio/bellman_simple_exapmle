@@ -69,6 +69,7 @@ fn main() {
     let public_inputs = vec![assignment.c.unwrap()];
 
     let proof = groth16::create_random_proof(assignment, &pk, rng).unwrap();
+    println!("{:?}", proof);
 
     let verification_result = groth16::verify_proof(&pvk, &proof, &public_inputs);
 
